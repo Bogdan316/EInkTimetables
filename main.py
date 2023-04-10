@@ -1,10 +1,5 @@
-import os.path
-import io
-import tempfile
-
 import requests
 from fastapi import FastAPI, UploadFile, HTTPException, status
-from requests import status_codes
 
 from raspberry_pis_manager import RaspberryPisManager, InvalidPiIdError, PiNotFoundError, UnregisteredPiIdError
 from raspberry_pis_scanner import RaspberryPisScanner
@@ -22,14 +17,6 @@ async def root():
 @app.get('/scan_pis')
 async def scan_pis():
     return scanner.scan()
-
-
-@app.get('/pi/{ip_addr}')
-async def pi(ip_addr: str):
-    response = requests.get(f'http://{ip_addr}:8000/')
-    if response.status_code != status_codes.codes['ok']:
-        return {'response': f'pi not found at {ip_addr}'}
-    return response.json()
 
 
 @app.post('/register/{pi_id}')
