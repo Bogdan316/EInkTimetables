@@ -3,13 +3,15 @@ import io
 import tempfile
 
 import requests
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI, UploadFile, HTTPException, status
 from requests import status_codes
 
+from raspberry_pis_manager import RaspberryPisManager, InvalidPiIdError, PiNotFoundError, UnregisteredPiIdError
 from raspberry_pis_scanner import RaspberryPisScanner
 
 app = FastAPI()
 scanner = RaspberryPisScanner()
+manager = RaspberryPisManager()
 
 
 @app.get('/')
@@ -30,18 +32,46 @@ async def pi(ip_addr: str):
     return response.json()
 
 
+@app.post('/register/{pi_id}')
+async def register_pi(pi_id: str):
+    try:
+        manager.register_pi(pi_id)
+    except InvalidPiIdError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except PiNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @app.post('/pi/{pi_id}/upload-timetable/')
 async def upload_timetable(pi_id: str, file: UploadFile):
-    with tempfile.NamedTemporaryFile() as temp_file:
-        temp_file.name = file.filename
-        temp_file.write(await file.read())
+    try:
+        pi_ip_addr = manager.resolve_pi_id(pi_id)
+    except UnregisteredPiIdError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-        headers = {
-            'accept': 'application/json',
-            'filename': file.filename
-        }
-        response = requests.post(f"http://{pi_id}:8000/upload-timetable/", headers=headers, files={'file': temp_file})
-        print(response.text)
+    contents = await file.read()
+
+    headers = {
+        'accept': 'application/json',
+        'filename': file.filename
+    }
+    response = requests.post(f"http://{pi_ip_addr}:8000/upload-timetable/", headers=headers,
+                             files={'file': contents})
+    response.raise_for_status()
+
     await file.close()
 
-    return {"response": "upload successful"}
+    return "Upload successful."
+
+
+@app.post('/pi/{pi_id}/clear-screen/')
+async def clear_screen(pi_id: str):
+    try:
+        pi_ip_addr = manager.resolve_pi_id(pi_id)
+    except UnregisteredPiIdError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    response = requests.post(f"http://{pi_ip_addr}:8000/clear-screen/")
+    response.raise_for_status()
+
+    return response.text
