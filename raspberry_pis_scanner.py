@@ -8,6 +8,9 @@ from typing import Optional, Dict, List
 
 
 class RaspberryPisScanner:
+    """
+    Updates the ARP table using a ping sweep.
+    """
     ip_address_regex = r'(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}' \
                        r'(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])'
     mac_address_regex = r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})'
@@ -21,6 +24,10 @@ class RaspberryPisScanner:
 
     @staticmethod
     def _get_network_address() -> str:
+        """
+        Returns the network address a /24 mask is assumed.
+        :return: the host network address
+        """
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(0)
         try:
@@ -37,6 +44,11 @@ class RaspberryPisScanner:
 
     @staticmethod
     def _ping_host(address: str) -> Optional[str]:
+        """
+        Pings the provided ip address.
+        :param address: ip address.
+        :return: the ip address if the host responded to the ping
+        """
         process_result = subprocess.run(['/usr/bin/ping', '-c1', address],
                                         stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
         if process_result.returncode == 0:
@@ -44,15 +56,28 @@ class RaspberryPisScanner:
 
     @staticmethod
     def _format_mac(mac: str) -> str:
+        """
+        Gets only the hex values from the provided MAC address.
+        :param mac: MAC address
+        :return: string with hex values
+        """
         return mac.lower().replace(':', '').replace('-', '')
 
     def _ping_sweep(self):
+        """
+        Does multiple pings in parallel to scan the network.
+        :return: a list with the hosts that responded to pings
+        """
         with multiprocessing.Pool(50) as pool:
             results = pool.map(self._ping_host, (self.network_address + f'.{i}' for i in range(1, 256)))
 
         self.live_hosts = [ip for ip in results if ip is not None]
 
     def _get_arp_table(self):
+        """
+        Extracts the MAC and ip address for each host from the ARP table and updates the arp_table dict.
+        :return:
+        """
         process_result = subprocess.run(['/usr/sbin/arp', '-na'], capture_output=True)
         if process_result.returncode != 0:
             raise RuntimeError('Unable to access the ARP table.')
@@ -68,9 +93,22 @@ class RaspberryPisScanner:
                     self.arp_table[self._format_mac(mac_addr.group(0))] = arp_host
 
     def get_ip_from_arp_table(self, mac: str) -> Optional[str]:
+        """
+        Checks if the provided MAC address has an ip address associated in the ARP table if not updates the ARP table
+        one more time before checking again.
+        :param mac: MAC address
+        :return: ip address corresponding to the provided MAC
+        """
+        if mac not in self.arp_table:
+            self._get_arp_table()
+
         return self.arp_table.get(mac, None)
 
     def scan(self):
+        """
+        Does a ping sweep of the network (/24 mask is assumed) and updates the current view of the ARP table.
+        :return:
+        """
         self._ping_sweep()
         self._get_arp_table()
 
