@@ -28,7 +28,7 @@ class FirebaseService:
             'databaseURL': self.DB
         })
 
-    def _add_url_to_db(self, rasp_id: str, url: str):
+    def _add_url_to_db(self, rasp_id: str, blob_name: str, url: str):
         """
         Updates the list of url images from firebase db for the provided Raspberry Pi ID.
         :param rasp_id: Raspberry Pi ID
@@ -36,9 +36,9 @@ class FirebaseService:
         :return:
         """
         ref = db.reference(f'{self.DB_ROOT}/{rasp_id}/images')
-        ref.push(url)
+        ref.push({'blob_name': blob_name,  'url': url})
 
-    def _upload_img(self, img_name: str, contents: bytes) -> str:
+    def _upload_img(self, img_name: str, contents: bytes) -> Tuple[str, str]:
         """
         Uploads the image provided as bytes to firebase storage.
         :param img_name: image name
@@ -51,7 +51,7 @@ class FirebaseService:
         blob.upload_from_string(io.BytesIO(contents).read(), content_type=f'image/{ext[1:]}')
         blob.make_public()
 
-        return blob.public_url
+        return blob.name, blob.public_url
 
     def update_clear_status(self, rasp_id: str, is_clear: bool):
         """
@@ -63,7 +63,7 @@ class FirebaseService:
         ref = db.reference(f'{self.DB_ROOT}/{rasp_id}/is_clear')
         ref.set(is_clear)
 
-    def update_timetable_history(self, rasp_id: str,  img_name: str, contents: bytes) -> str:
+    def update_timetable_history(self, rasp_id: str,  img_name: str, contents: bytes):
         """
         Uploads the provided images to firebase storage and updates the list of images associated with the provided
         Raspberry Pi ID.
@@ -72,8 +72,12 @@ class FirebaseService:
         :param contents: image as bytes
         :return:
         """
-        img_url = self._upload_img(img_name, contents)
-        self._add_url_to_db(rasp_id, img_url)
+        blob_name, img_url = self._upload_img(img_name, contents)
+        self._add_url_to_db(rasp_id, blob_name, img_url)
         self.update_clear_status(rasp_id, False)
 
-        return img_url
+    def get_rasp_status(self, rasp_id: str) -> object:
+        ref = db.reference(f'{self.DB_ROOT}/{rasp_id}')
+        rasp_details = ref.get()
+
+        return {'id': rasp_id, 'details': rasp_details}

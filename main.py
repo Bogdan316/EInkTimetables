@@ -28,56 +28,59 @@ async def scan_pis():
 
 @app.post('/register/mac/{pi_mac}')
 async def register_pi_mac(pi_mac: str):
-    pi_id = manager.register_pi(manager.get_pi_id(pi_mac))
+    rasp_id = manager.get_pi_id(pi_mac)
+    manager.register_pi(rasp_id)
+    rasp_details = service.get_rasp_status(rasp_id)
 
-    return {"rasp pi id": pi_id}
-
-
-@app.post('/register/id/{pi_id}')
-async def register_pi_id(pi_id: str):
-    manager.register_pi(pi_id)
-
-    return {"message": "Register successful."}
+    return rasp_details
 
 
-@app.post('/pi/{pi_id}/upload-timetable/')
-async def upload_timetable(pi_id: str, file: UploadFile):
+@app.post('/register/id/{rasp_id}')
+async def register_pi_id(rasp_id: str):
+    manager.register_pi(rasp_id)
+    rasp_details = service.get_rasp_status(rasp_id)
+
+    return rasp_details
+
+
+@app.post('/pi/{rasp_id}/upload-timetable/')
+async def upload_timetable(rasp_id: str, file: UploadFile):
     """
     Sends the provided file to the screen with the corresponding Raspberry Pi ID, updates the firebase backend.
-    :param pi_id: Raspberry Pi ID
+    :param rasp_id: Raspberry Pi ID
     :param file: uploaded file
     :return:
     """
     contents = await file.read()
 
-    pi_ip_addr = manager.resolve_pi_id(pi_id)
+    pi_ip_addr = manager.resolve_pi_id(rasp_id)
     headers = {'accept': 'application/json', 'filename': file.filename}
     response = requests.post(f"http://{pi_ip_addr}:8000/upload-timetable/", headers=headers, files={'file': contents})
 
     await file.close()
 
     if not response.ok:
-        raise UnreachablePiError(pi_id)
+        raise UnreachablePiError(rasp_id)
 
-    service.update_timetable_history(pi_id, file.filename, contents)
+    service.update_timetable_history(rasp_id, file.filename, contents)
     return response.json()
 
 
-@app.post('/pi/{pi_id}/clear-screen/')
-async def clear_screen(pi_id: str, cycles: int = 1):
+@app.post('/pi/{rasp_id}/clear-screen/')
+async def clear_screen(rasp_id: str, cycles: int = 1):
     """
     Clears the screen of the corresponding Raspberry Pi ID, updates the firebase backend.
-    :param pi_id: Raspberry Pi ID
+    :param rasp_id: Raspberry Pi ID
     :param cycles: number of black to white cycles to run on the screen
     :return:
     """
-    pi_ip_addr = manager.resolve_pi_id(pi_id)
+    pi_ip_addr = manager.resolve_pi_id(rasp_id)
 
     response = requests.post(f"http://{pi_ip_addr}:8000/clear-screen/?cycles={cycles}")
     if not response.ok:
-        raise UnreachablePiError(pi_id)
+        raise UnreachablePiError(rasp_id)
 
-    service.update_clear_status(pi_id, True)
+    service.update_clear_status(rasp_id, True)
     return response.json()
 
 
