@@ -1,12 +1,15 @@
-import 'dart:collection';
+import 'dart:typed_data';
 
-import 'package:eink_timetables/rasp_model.dart';
-import 'package:eink_timetables/rasp_pi_list_tile.dart';
+import 'package:eink_timetables/rasp_pi_model.dart';
+import 'package:eink_timetables/rasp_pi_list_tile_menu.dart';
+import 'package:eink_timetables/rasp_pi_register_dialog.dart';
 import 'package:eink_timetables/rasp_pi_screen.dart';
 import 'package:eink_timetables/rasp_pi_service.dart';
+import 'package:file_picker/_internal/file_picker_web.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:masked_text/masked_text.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_picker_web/image_picker_web.dart';
 
 import 'colors.dart';
 import 'rasp_pi_icon.dart';
@@ -26,33 +29,41 @@ class MyApp extends StatelessWidget {
           const Color(0xFF01135d),
         ),
       ),
-      home: MyHomePage(title: 'Timetables Management'),
+      home: const MyHomePage(title: 'Timetables Management'),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  MyHomePage({super.key, required this.title});
+  const MyHomePage({super.key, required this.title});
 
   final String title;
-  final raspPiService = RaspPiService();
+  final raspPiService = const RaspPiService();
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  final HashSet<RaspPi> _raspPis = HashSet();
+  late Future<List<RaspPi>> _raspPis;
+  final ImagePicker picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRegisteredPis();
+  }
+
+  void _loadRegisteredPis() {
+    _raspPis = widget.raspPiService.getRaspPis();
+  }
 
   void _registerRaspPi() async {
-    var raspPi = await showDataAlert(widget.raspPiService);
-
-    if (raspPi != null) {
-      setState(() {
-        _raspPis.add(raspPi);
-      });
-    }
+    await _showDataAlert(widget.raspPiService);
+    setState(() {
+      _loadRegisteredPis();
+    });
   }
 
   @override
@@ -62,39 +73,114 @@ class _MyHomePageState extends State<MyHomePage> {
         title: Text(widget.title),
       ),
       body: Center(
-        child: ListView(
-          children: _raspPis.map((pi) {
-            return Padding(
-              padding: const EdgeInsets.all(10),
-              child: buildRaspPiTile(
-                pi,
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => RaspPiScreen(
-                      raspPi: pi,
-                    ),
-                  ),
-                ),
-                (value) {
-                  switch (value) {
-                    case 'clear':
-                      {
-                        widget.raspPiService.clearRaspPi(pi);
-                        break;
-                      }
-                    case 'delete':
-                      {
-                        setState(() {
-                          _raspPis.remove(pi);
-                        });
-                        break;
-                      }
-                  }
-                },
-              ),
-            );
-          }).toList(),
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.75,
+          child: FutureBuilder<List<RaspPi>>(
+              future: _raspPis,
+              builder: (context, snapshot) {
+                var raspList = <RaspPi>[];
+                if (snapshot.hasData) {
+                  raspList = snapshot.data!;
+                }
+                return ListView(
+                  children: raspList.map(
+                    (pi) {
+                      return Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Material(
+                          borderRadius:
+                              const BorderRadius.all(Radius.circular(10.0)),
+                          shadowColor: Colors.blueGrey,
+                          elevation: 20.0,
+                          child: Container(
+                            color: Colors.white10,
+                            child: ListTile(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => RaspPiScreen(
+                                    raspPi: pi,
+                                  ),
+                                ),
+                              ).then((_) => setState(() {
+                                    _loadRegisteredPis();
+                                  })),
+                              contentPadding: const EdgeInsets.all(10),
+                              dense: true,
+                              leading: const Icon(
+                                RaspPiIcon.raspberry_pi,
+                                size: 40,
+                                color: Colors.black,
+                              ),
+                              title: Text(
+                                pi.id,
+                                style: const TextStyle(fontSize: 20),
+                              ),
+                              subtitle: Text(pi.id),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Tooltip(
+                                    message: 'The screen is currently '
+                                        '${pi.isClear ? 'cleared' : 'not cleared'}.',
+                                    child: Icon(
+                                      Icons.screenshot_monitor_rounded,
+                                      color: pi.isClear
+                                          ? Colors.green
+                                          : Colors.black,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 50),
+                                  RaspPiPopupMenu(
+                                    callback: (value) async {
+                                      switch (value) {
+                                        case 'clear':
+                                          {
+                                            widget.raspPiService
+                                                .clearRaspPi(pi)
+                                                .then((_) => setState(() {
+                                                      _loadRegisteredPis();
+                                                    }));
+                                            break;
+                                          }
+                                        case 'delete':
+                                          {
+                                            setState(
+                                              () {
+                                                raspList.remove(pi);
+                                              },
+                                            );
+                                            break;
+                                          }
+                                        case 'upload':
+                                          {
+                                            var timetable = await FilePickerWeb
+                                                .platform
+                                                .pickFiles();
+                                            if (timetable != null) {
+                                              widget.raspPiService
+                                                  .uploadTimetable(
+                                                pi,
+                                                timetable.files.single.bytes!,
+                                                timetable.files.single.name,
+                                              );
+                                              setState(() {});
+                                            }
+                                            break;
+                                          }
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ).toList(),
+                );
+              }),
         ),
       ),
       floatingActionButton: FloatingActionButton(
@@ -105,76 +191,11 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Future<dynamic> showDataAlert(RaspPiService raspPiService) {
-    final textController = TextEditingController();
-
+  Future<dynamic> _showDataAlert(RaspPiService raspPiService) {
     return showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(
-              Radius.circular(
-                20.0,
-              ),
-            ),
-          ),
-          contentPadding: const EdgeInsets.only(
-            top: 10.0,
-          ),
-          title: const Text(
-            'Register Raspberry Pi',
-            style: TextStyle(fontSize: 24.0),
-          ),
-          content: Container(
-            padding: const EdgeInsets.all(10),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Container(
-                    padding: const EdgeInsets.all(8.0),
-                    child: MaskedTextField(
-                      autofocus: true,
-                      mask: 'xx:xx:xx:xx:xx:xx',
-                      maskFilter: {'x': RegExp(r'\d|[a-fA-F]')},
-                      maxLengthEnforcement: MaxLengthEnforcement.enforced,
-                      maxLength: 17,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'Enter MAC Address',
-                        labelText: 'MAC',
-                      ),
-                      controller: textController,
-                    ),
-                  ),
-                  Container(
-                    width: double.infinity,
-                    height: 60,
-                    padding: const EdgeInsets.all(8.0),
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        await raspPiService
-                            .registerRaspPi(textController.text)
-                            .then(
-                                (raspPi) => Navigator.of(context).pop(raspPi));
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                      ),
-                      child: const Text(
-                        "Register",
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
+        return const RaspPiRegisterDialog();
       },
     );
   }

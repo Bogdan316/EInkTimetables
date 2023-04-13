@@ -37,6 +37,10 @@ dependencies:
   cupertino_icons: ^1.0.2
   http: ^0.13.5
   masked_text: ^1.1.2
+  image_picker: ^0.8.7+2
+  image_picker_web: ^3.0.0+1
+  dio: ^5.1.1
+  file_picker: ^5.2.9
 
 dev_dependencies:
   flutter_test:

@@ -2,7 +2,7 @@ import requests
 from fastapi import FastAPI, UploadFile, status, Request
 from fastapi.responses import JSONResponse
 
-from exceptions import PiNotFoundError, InvalidPiIdError, UnregisteredPiIdError, UnreachablePiError
+from exceptions import PiNotFoundError, InvalidPiIdError, UnregisteredPiIdError, UnreachablePiError, ImageNotFoundError
 from firebase_service import FirebaseService
 from raspberry_pis_manager import RaspberryPisManager
 from raspberry_pis_scanner import RaspberryPisScanner
@@ -66,6 +66,23 @@ async def upload_timetable(rasp_id: str, file: UploadFile):
     return response.json()
 
 
+@app.post('/pi/{rasp_id}/upload-past-timetable/')
+async def upload_past_timetable(rasp_id: str, image_name: str):
+    contents = service.get_image_by_name(image_name)
+
+    pi_ip_addr = manager.resolve_pi_id(rasp_id)
+    headers = {'accept': 'application/json', 'filename': image_name}
+    response = requests.post(f"http://{pi_ip_addr}:8000/upload-timetable/", headers=headers, files={'file': contents})
+
+    if not response.ok:
+        raise UnreachablePiError(rasp_id)
+    
+    service.update_clear_status(rasp_id, False)
+    service.update_displaying(rasp_id, image_name)
+
+    return response.json()
+
+
 @app.post('/pi/{rasp_id}/clear-screen/')
 async def clear_screen(rasp_id: str, cycles: int = 1):
     """
@@ -82,6 +99,11 @@ async def clear_screen(rasp_id: str, cycles: int = 1):
 
     service.update_clear_status(rasp_id, True)
     return response.json()
+
+
+@app.get('/registered-pis/')
+async def get_registered_pis():
+    return service.get_registered_rasp_pis(list(manager.registered_pis.keys()))
 
 
 @app.exception_handler(InvalidPiIdError)
@@ -110,6 +132,14 @@ async def pi_not_found_error_handler(_: Request, exc: PiNotFoundError):
 
 @app.exception_handler(UnreachablePiError)
 async def unreachable_pi_error_handler(_: Request, exc: PiNotFoundError):
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={'message': str(exc)}
+    )
+
+
+@app.exception_handler(ImageNotFoundError)
+async def unreachable_pi_error_handler(_: Request, exc: ImageNotFoundError):
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={'message': str(exc)}

@@ -1,11 +1,16 @@
-from typing import List, Tuple
+import json
+from typing import List, Tuple, Dict
 import os
 import io
+from datetime import datetime
+from operator import itemgetter
 
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import storage
 from firebase_admin import db
+
+from exceptions import ImageNotFoundError
 
 
 class FirebaseService:
@@ -36,7 +41,7 @@ class FirebaseService:
         :return:
         """
         ref = db.reference(f'{self.DB_ROOT}/{rasp_id}/images')
-        ref.push({'blob_name': blob_name,  'url': url})
+        ref.push({'blob_name': blob_name,  'url': url, 'upload_date': str(datetime.today())})
 
     def _upload_img(self, img_name: str, contents: bytes) -> Tuple[str, str]:
         """
@@ -62,6 +67,8 @@ class FirebaseService:
         """
         ref = db.reference(f'{self.DB_ROOT}/{rasp_id}/is_clear')
         ref.set(is_clear)
+        if is_clear:
+            self.update_displaying(rasp_id, '')
 
     def update_timetable_history(self, rasp_id: str,  img_name: str, contents: bytes):
         """
@@ -75,9 +82,34 @@ class FirebaseService:
         blob_name, img_url = self._upload_img(img_name, contents)
         self._add_url_to_db(rasp_id, blob_name, img_url)
         self.update_clear_status(rasp_id, False)
+        self.update_displaying(rasp_id, blob_name)
 
     def get_rasp_status(self, rasp_id: str) -> object:
         ref = db.reference(f'{self.DB_ROOT}/{rasp_id}')
         rasp_details = ref.get()
 
         return {'id': rasp_id, 'details': rasp_details}
+
+    def get_image_by_name(self, blob_name: str) -> bytes:
+        blob = self._bucket.get_blob(blob_name)
+        if blob is None:
+            raise ImageNotFoundError(blob_name)
+
+        return blob.download_as_bytes()
+
+    def update_displaying(self, rasp_id: str, img_name: str):
+        ref = db.reference(f'{self.DB_ROOT}/{rasp_id}/displaying')
+        ref.set(img_name)
+
+    @staticmethod
+    def get_registered_rasp_pis(rasp_ids: List[str]) -> List[Dict]:
+        if len(rasp_ids) == 0:
+            return []
+
+        rasp_pis = db.reference('rasp_pis').get()
+        return [{'id': k, 'details': v} for k, v in rasp_pis.items() if k in rasp_ids]
+
+
+if __name__ == '__main__':
+    serv = FirebaseService()
+    print(serv.get_registered_rasp_pis(['5F8Boi3k']))
