@@ -4,6 +4,7 @@ import os
 import io
 from datetime import datetime
 from operator import itemgetter
+import uuid
 
 import firebase_admin
 from firebase_admin import credentials
@@ -33,7 +34,7 @@ class FirebaseService:
             'databaseURL': self.DB
         })
 
-    def _add_url_to_db(self, rasp_id: str, blob_name: str, url: str):
+    def _add_url_to_db(self, rasp_id: str, blob_name: str, img_name: str, url: str):
         """
         Updates the list of url images from firebase db for the provided Raspberry Pi ID.
         :param rasp_id: Raspberry Pi ID
@@ -41,7 +42,7 @@ class FirebaseService:
         :return:
         """
         ref = db.reference(f'{self.DB_ROOT}/{rasp_id}/images')
-        ref.push({'blob_name': blob_name,  'url': url, 'upload_date': str(datetime.today())})
+        ref.push({'blob_name': blob_name, 'img_name': img_name,  'url': url, 'upload_date': str(datetime.today())})
 
     def _upload_img(self, img_name: str, contents: bytes) -> Tuple[str, str]:
         """
@@ -50,7 +51,7 @@ class FirebaseService:
         :param contents: image as bytes
         :return: the public url of the image
         """
-        blob = self._bucket.blob(img_name)
+        blob = self._bucket.blob(str(uuid.uuid1()))
         _, ext = os.path.splitext(img_name)
 
         blob.upload_from_string(io.BytesIO(contents).read(), content_type=f'image/{ext[1:]}')
@@ -80,7 +81,7 @@ class FirebaseService:
         :return:
         """
         blob_name, img_url = self._upload_img(img_name, contents)
-        self._add_url_to_db(rasp_id, blob_name, img_url)
+        self._add_url_to_db(rasp_id, blob_name, img_name, img_url)
         self.update_clear_status(rasp_id, False)
         self.update_displaying(rasp_id, blob_name)
 
@@ -102,14 +103,21 @@ class FirebaseService:
         ref.set(img_name)
 
     @staticmethod
-    def get_registered_rasp_pis(rasp_ids: List[str]) -> List[Dict]:
-        if len(rasp_ids) == 0:
+    def get_registered_rasp_pis() -> List[Dict]:
+        rasp_pis = db.reference('rasp_pis').get()
+        if rasp_pis is None:
             return []
 
-        rasp_pis = db.reference('rasp_pis').get()
-        return [{'id': k, 'details': v} for k, v in rasp_pis.items() if k in rasp_ids]
+        return [{'id': k, 'details': v} for k, v in rasp_pis.items()]
 
+    def register_rasp_pi(self, rasp_id: str, rasp_name: str):
+        ref = db.reference(f'{self.DB_ROOT}/{rasp_id}')
+        ref.update({'name': rasp_name})
 
-if __name__ == '__main__':
-    serv = FirebaseService()
-    print(serv.get_registered_rasp_pis(['5F8Boi3k']))
+    def unregister_rasp_pi(self, rasp_id: str):
+        ref = db.reference(f'{self.DB_ROOT}/{rasp_id}')
+        ref.delete()
+
+    def rename_rasp_pi(self, rasp_id: str, name: str):
+        self.register_rasp_pi(rasp_id, name)
+

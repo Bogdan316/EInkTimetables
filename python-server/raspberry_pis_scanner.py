@@ -1,10 +1,9 @@
 import multiprocessing
+import re
 import socket
 import subprocess
-import re
-import base64
-
 from typing import Optional, Dict, List
+from datetime import datetime
 
 
 class RaspberryPisScanner:
@@ -21,6 +20,8 @@ class RaspberryPisScanner:
     def __init__(self):
         self.network_address = self._get_network_address()
         self.live_hosts = []
+        self.last_scan: Optional[datetime] = None
+        self.last_scan_result = None
 
     @staticmethod
     def _get_network_address() -> str:
@@ -104,13 +105,20 @@ class RaspberryPisScanner:
 
         return self.arp_table.get(mac, None)
 
-    def scan(self):
+    def scan(self, force: bool = False):
         """
         Does a ping sweep of the network (/24 mask is assumed) and updates the current view of the ARP table.
         :return:
         """
+        # make a scan only every 30 minutes
+        if not force and (self.last_scan and (self.last_scan - datetime.now()).total_seconds() <= 1800):
+            return self.last_scan_result
+
         self._ping_sweep()
         self._get_arp_table()
 
-        return {mac: ip for mac, ip in self.arp_table.items()
-                if any([mac.startswith(pi_mac.lower()) for pi_mac in self.raspberry_pi_mac_prefixes])}
+        self.last_scan = datetime.now()
+        self.last_scan_result = {mac: ip for mac, ip in self.arp_table.items()
+                                 if any([mac.startswith(pi_mac.lower()) for pi_mac in self.raspberry_pi_mac_prefixes])}
+
+        return self.last_scan_result

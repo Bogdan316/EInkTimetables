@@ -25,3 +25,9 @@ class ImageNotFoundError(RuntimeError):
 
     def __init__(self, img_name: str):
         super().__init__(f'The image with the provided name ({img_name}) could not be found.')
+
+
+class RaspPiAlreadyRegisteredError(RuntimeError):
+
+    def __init__(self, rasp_id: str):
+        super().__init__(f'The provided Raspberry Pi is already registered with the ID: {rasp_id}.')

@@ -37,7 +37,7 @@ class RaspberryPisManager:
         except binascii.Error:
             raise InvalidPiIdError(pi_id)
 
-    def register_pi(self, pi_id: str):
+    def register_pi(self, pi_id: str, force_scan: bool = False):
         """
         Resolves the ip address for the provided ID using the current ARP table and updates the list of
         registered Raspberry Pis if the Raspberry Pi with the provided ID is connected to the network.
@@ -51,7 +51,7 @@ class RaspberryPisManager:
         ip_addr = self.scanner.get_ip_from_arp_table(pi_mac)
         if ip_addr is None:
             # if the MAC address is not found in the ARP table do a scan to update the ARP table
-            self.scanner.scan()
+            self.scanner.scan(force_scan)
             ip_addr = self.scanner.get_ip_from_arp_table(pi_mac)
             if ip_addr is None:
                 raise PiNotFoundError(pi_id)
