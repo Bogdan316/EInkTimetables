@@ -33,7 +33,7 @@ class _RaspPiScreenState extends State<RaspPiScreen> {
       children: [
         Scaffold(
           appBar: AppBar(
-            title: Text(widget.raspPi.id),
+            title: Text(widget.raspPi.name),
           ),
           body: Padding(
             padding: const EdgeInsets.all(8),
@@ -48,7 +48,7 @@ class _RaspPiScreenState extends State<RaspPiScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: Card(
-                          color: img.name == widget.raspPi.displaying
+                          color: img.blobName == widget.raspPi.displaying
                               ? Theme.of(context).primaryColorLight
                               : Theme.of(context).cardColor,
                           semanticContainer: true,
@@ -63,19 +63,16 @@ class _RaspPiScreenState extends State<RaspPiScreen> {
                             splashColor: Theme.of(context).primaryColor,
                             borderRadius: BorderRadius.circular(10.0),
                             onTap: () async {
-                              if (img.name != widget.raspPi.displaying) {
+                              if (img.blobName != widget.raspPi.displaying) {
                                 setState(() {
                                   _isLoading = true;
                                 });
 
-                                await raspPiService
-                                    .uploadPastTimetable(
-                                        widget.raspPi, img.name)
-                                    .then((_) => setState(() {
-                                        widget.raspPi.displaying = img.name;
-                                    }));
+                                await raspPiService.uploadPastTimetable(
+                                    widget.raspPi, img.blobName);
 
                                 setState(() {
+                                  widget.raspPi.displaying = img.blobName;
                                   _isLoading = false;
                                 });
                               }

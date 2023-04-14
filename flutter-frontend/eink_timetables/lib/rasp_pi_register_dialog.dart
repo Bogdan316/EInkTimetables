@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:masked_text/masked_text.dart';
 
+import 'error_dialog.dart';
+import 'exceptions.dart';
+
 class RaspPiRegisterDialog extends StatefulWidget {
   final _raspPiService = const RaspPiService();
 
@@ -13,7 +16,10 @@ class RaspPiRegisterDialog extends StatefulWidget {
 }
 
 class _RaspPiRegisterDialogState extends State<RaspPiRegisterDialog> {
-  final textController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  final macTextController = TextEditingController();
+  final nameTextController = TextEditingController();
+
   bool _isLoading = false;
 
   @override
@@ -51,54 +57,94 @@ class _RaspPiRegisterDialogState extends State<RaspPiRegisterDialog> {
             padding: const EdgeInsets.all(10),
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Container(
-                    padding: const EdgeInsets.all(8.0),
-                    child: MaskedTextField(
-                      autofocus: true,
-                      mask: 'xx:xx:xx:xx:xx:xx',
-                      maskFilter: {'x': RegExp(r'\d|[a-fA-F]')},
-                      maxLengthEnforcement: MaxLengthEnforcement.enforced,
-                      maxLength: 17,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'Enter MAC Address',
-                        labelText: 'MAC',
-                      ),
-                      controller: textController,
-                    ),
-                  ),
-                  Container(
-                    width: double.infinity,
-                    height: 60,
-                    padding: const EdgeInsets.all(8.0),
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        setState(() {
-                          _isLoading = true;
-                        });
-                        await widget._raspPiService
-                            .registerRaspPi(textController.text)
-                            .then((raspPi) {
-                          setState(() {
-                            _isLoading = false;
-                          });
-                          Navigator.of(context).pop(raspPi);
-                        });
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                      ),
-                      child: const Text(
-                        "Register",
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8.0),
+                      child: TextFormField(
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'This field is mandatory.';
+                          }
+                          return null;
+                        },
+                        autofocus: true,
+                        autocorrect: false,
+                        maxLengthEnforcement: MaxLengthEnforcement.enforced,
+                        maxLength: 20,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Enter Name',
+                          labelText: 'Name',
+                        ),
+                        controller: nameTextController,
+                        inputFormatters: <TextInputFormatter>[
+                          FilteringTextInputFormatter.allow(
+                              RegExp("[0-9a-zA-Z]")),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                    Container(
+                      padding: const EdgeInsets.all(8.0),
+                      child: MaskedTextField(
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'This field is mandatory.';
+                          }
+                          return null;
+                        },
+                        mask: 'xx:xx:xx:xx:xx:xx',
+                        maskFilter: {'x': RegExp(r'\d|[a-fA-F]')},
+                        maxLengthEnforcement: MaxLengthEnforcement.enforced,
+                        maxLength: 17,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Enter MAC Address',
+                          labelText: 'MAC',
+                        ),
+                        controller: macTextController,
+                      ),
+                    ),
+                    Container(
+                      width: double.infinity,
+                      height: 60,
+                      padding: const EdgeInsets.all(8.0),
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          if (_formKey.currentState!.validate()) {
+                            setState(() => _isLoading = true);
+                            try {
+                              await widget._raspPiService
+                                  .registerRaspPi(
+                                    macTextController.text,
+                                    nameTextController.text,
+                                  )
+                                  .then((_) => Navigator.of(context).pop())
+                                  .whenComplete(
+                                    () => setState(() => _isLoading = false),
+                                  );
+                            } on RaspPiAlreadyRegisteredException catch (e) {
+                              showErrorDialog(
+                                'Raspberry Pi Already Registered',
+                                e.msg,
+                                context,
+                              );
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).primaryColor,
+                        ),
+                        child: const Text(
+                          "Register",
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
