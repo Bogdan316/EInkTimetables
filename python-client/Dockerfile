@@ -8,9 +8,9 @@ RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
 
 RUN apt-get update && apt-get install -y curl
 
-RUN curl https://get.pimoroni.com/inky | bash -y
+RUN pip3 install inky[rpi,example-depends]
 
 COPY ./main.py /app/
 
-
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
+
