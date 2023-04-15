@@ -6,8 +6,6 @@ COPY ./requirements.txt /app/requirements.txt
 
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
 
-RUN apt-get update && apt-get install -y curl
-
 RUN pip3 install inky[rpi,example-depends]
 
 COPY ./main.py /app/
