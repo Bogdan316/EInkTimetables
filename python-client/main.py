@@ -18,26 +18,16 @@ async def upload_image(file: UploadFile):
         screen = InkyWHAT('black')
 
     img = Image.open(io.BytesIO(contents))
+    img = img.resize(screen.resolution, resample=Image.LANCZOS)
 
-    w, h = img.size
+    if type(screen) != InkyWHAT:
+        pal_img = Image.new("P", (1, 1))
+        pal_img.putpalette((255, 255, 255, 0, 0, 0, 255, 255, 255) + (0, 0, 0) * 252)
 
-    # Calculate the new height and width of the image
-
-    h_new = 300
-    w_new = int((float(w) / h) * h_new)
-
-    # Resize the image with high-quality resampling
-
-    img = img.resize((w_new, h_new), resample=Image.LANCZOS)
-
-    # Convert the image to use a white / black / red colour palette
-
-    pal_img = Image.new("P", (1, 1))
-    pal_img.putpalette((255, 255, 255, 0, 0, 0, 255, 255, 255) + (0, 0, 0) * 252)
-
-    img = img.convert("RGB").quantize(palette=pal_img)
-
-    # Display the final image on Inky wHAT
+        img = img.convert("RGB").quantize(palette=pal_img)
+    else:
+        thresh = 200
+        img = img.convert('1').point(lambda x: 255 if x < thresh else 0, mode='1')
 
     screen.set_image(img)
     screen.show()
